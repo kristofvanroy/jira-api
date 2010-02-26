@@ -1,0 +1,109 @@
+<?php
+
+module_load_include('inc','jira_api','includes/jira_api.helpers');
+
+/**
+ * Implementation of hook_menu()
+ */
+function jira_api_menu(){
+  $items = array();
+
+  $items['admin/settings/jira'] = array(
+    'title' => 'Jira settings',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('jira_api_settings_form'),
+    'access arguments' => array('administer Jira settings'),
+    'file' => 'includes/jira_api.settings.inc',
+  );
+
+  return $items;
+}
+
+/**
+ * Implementation of hook_perm()
+ */
+function jira_api_perm(){
+  return array('administer Jira settings');
+}
+
+class Jira {
+  private $_username = '';
+	private $_password = '';
+	private $_auth = '';
+  private $_soap = '';
+  private $_active_project = '';
+  private $_wsdl_url = '';
+
+	public function __construct() {
+    $this->_username = variable_get('jira_username','');
+    $this->_password = variable_get('jira_password','');
+    $this->_wsdl_url = variable_get('jira_wsdl','');
+    $this->_active_project = variable_get('jira_active_project','');
+
+		$this->connect();
+	}
+
+  protected function connect(){
+    $soap = $this->getSoap();
+    try{
+      $this->_auth = $soap->login($this->_username, $this->_password);
+    } catch (Exception $e) {
+      drupal_set_message(t('Failed to authenticate with JIRA, check your JIRA username and password'), 'error');
+    }
+  }
+
+  protected function getSoap(){
+    static $soap;
+
+    if (isset($soap)) {
+      return $soap;
+    }
+    else {
+      $soap = new SoapClient($this->_wsdl_url);
+    }
+    return $soap;
+  }
+
+  public function getProjectsNoSchemes(){
+    static $projectsNoSchemes;
+    if(isset($projectsNoSchemes)){
+      return $projectsNoSchemes;
+    }
+
+    try {
+      $soap = $this->getSoap();
+      $projectsNoSchemes = $soap->getProjectsNoSchemes($this->_auth);
+    } catch (Exception $e) {
+      drupal_set_message(t('Failed to retrieve a project list from JIRA'), 'error');
+    }
+
+    return $projectsNoSchemes;
+  }
+
+  public function getProjectWithSchemes(){
+    static $projectWithSchemes;
+    if(isset($projectWithSchemes)){
+      return $projectWithSchemes;
+    }
+    try {
+      $soap = $this->getSoap();
+      $projectWithSchemes = $soap->getProjectWithSchemesById($this->_auth,'');
+    } catch (Exception $e) {
+      drupal_set_message(t('Failed to retrieve a project from JIRA'), 'error');
+    }
+    return $projectsNoSchemes;
+  }
+
+  public function createIssue($issue){
+    try {
+      $soap = $this->getSoap();
+
+      // Extend issue with active project
+      $issue->project = $this->_active_project;
+
+      return $soap->createIssue($this->_auth, $issue);
+    } catch (Exception $e) {
+      drupal_set_message(t('Failed to create JIRA issue'), 'error');
+    }
+  }
+}

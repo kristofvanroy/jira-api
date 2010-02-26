@@ -1,0 +1,3 @@
+name = "JIRA Api"
+description = "This modules serves as a JIRA utility module"
+core = 6.x
